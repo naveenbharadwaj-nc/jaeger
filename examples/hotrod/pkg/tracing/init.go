@@ -23,7 +23,9 @@ import (
 	"strings"
 	"sync"
 	"time"
-
+	"crypto/tls"
+    "crypto/x509"
+    "io/ioutil"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -98,6 +100,24 @@ func createOtelExporter(exporterType string) (sdktrace.SpanExporter, error) {
 		if !withSecure() {
 			opts = []otlptracehttp.Option{otlptracehttp.WithInsecure()}
 		}
+		cert, err := tls.LoadX509KeyPair("/var/tmp/client.crt", "/var/tmp/client.key")
+		if err != nil {
+			panic(err)
+		}
+
+		// Load CA certificate
+		caCert, err := ioutil.ReadFile("/var/tmp/ca.crt")
+		if err != nil {
+			panic(err)
+		}
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(caCert)
+
+		tlsConfig := &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			RootCAs:      caCertPool,
+		}
+		opts = append(opts, otlptracehttp.WithTLSClientConfig(tlsConfig))
 		exporter, err = otlptrace.New(
 			context.Background(),
 			otlptracehttp.NewClient(opts...),
